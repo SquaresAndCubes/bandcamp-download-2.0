@@ -1,0 +1,36 @@
+services:
+  bandcamp-sync:
+    build: .
+    image: bandcamp-sync
+    container_name: bandcamp-sync
+    restart: unless-stopped
+    # BANDCAMP_IDENTITY (your login cookie) and the settings below come from .env
+    env_file: .env
+    environment:
+      TZ: ${TZ:-UTC}
+      SYNC_TIME: ${SYNC_TIME:-04:00}
+      RUN_ON_START: ${RUN_ON_START:-false}
+      SYNC_ARGS: ${SYNC_ARGS:-}
+      BANDCAMP_TEMP_DIR: /work
+    # Write files as your Ubuntu user instead of root (run `id -u` / `id -g` to check).
+    user: "${PUID:-1000}:${PGID:-1000}"
+    volumes:
+      - type: bind
+        source: ${MUSIC_DIR:?Set MUSIC_DIR in .env to the STS9 music folder on this machine}
+        target: /music
+        bind:
+          # If the folder is missing (e.g. the share isn't mounted), fail instead of
+          # creating an empty folder and downloading the whole collection into it.
+          create_host_path: false
+      # Temporary space for zips while each show is downloaded and unpacked.
+      # Needs about 2x the size of one show free, and must be writable by PUID.
+      - type: bind
+        source: ${TEMP_DIR:-./tmp}
+        target: /work
+        bind:
+          create_host_path: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

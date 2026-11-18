@@ -1,0 +1,5 @@
+# Only the code goes into the image. In particular, never .env or identity.txt
+# (your Bandcamp login cookie).
+*
+!bandcamp_latest.py
+!scheduler.py
