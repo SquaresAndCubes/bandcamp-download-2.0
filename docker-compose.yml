@@ -12,6 +12,7 @@ services:
     environment:
       TZ: ${TZ:-UTC}
       SYNC_TIME: ${SYNC_TIME:-04:00}
+      SYNC_EVERY: ${SYNC_EVERY:-}
       RUN_ON_START: ${RUN_ON_START:-false}
       SYNC_ARGS: ${SYNC_ARGS:-}
       # Container paths for the mounts below. These override any BANDCAMP_SYNC_DEST /

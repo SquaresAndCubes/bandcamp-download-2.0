@@ -13,7 +13,7 @@ Nothing to install: it only uses Python's standard library.
 | | Just the script | Docker |
 |---|---|---|
 | What you need | Python 3 | Docker |
-| How it runs | When you run it | Automatically, once a day |
+| How it runs | When you run it | Automatically, daily or every few hours |
 | Good for | Picking shows by hand, a one-off sync, fixing folder names | A server that keeps the music folder up to date unattended |
 | Instructions | [Using the script on its own](#using-the-script-on-its-own) | [Running it daily with Docker](#running-it-daily-with-docker-optional) |
 
@@ -43,7 +43,7 @@ sync without Docker? A cron job does the same:
 | `.env` | **Private.** Your settings: collection URL, music folder, login cookie, Docker options. Never commit or share it. | Both |
 | `.env.example` | Template for `.env`. | Both |
 | `identity.txt` | **Private, optional.** The login cookie on its own; used if `.env` has none. Created by `--set-identity`. | Script |
-| `scheduler.py` | Runs the sync daily at `SYNC_TIME` and sends notifications. | Docker |
+| `scheduler.py` | Runs the sync daily at `SYNC_TIME` (or every `SYNC_EVERY`) and sends notifications. | Docker |
 | `Dockerfile`, `docker-compose.yml` | The container. | Docker |
 
 ## Using the script on its own
@@ -172,8 +172,9 @@ expired, or for another account). The scheduler uses `3` to send the "cookie exp
 
 ## Running it daily with Docker (optional)
 
-Only needed if you want the sync to run by itself every day on a server. The container
-runs `bandcamp_download.py --sync --yes` once a day and can send you notifications.
+Only needed if you want the sync to run by itself on a server. The container runs
+`bandcamp_download.py --sync --yes` once a day (or every `SYNC_EVERY`, e.g. every hour)
+and can send you notifications.
 
 ### Deploy on Ubuntu
 
@@ -208,7 +209,8 @@ runs `bandcamp_download.py --sync --yes` once a day and can send you notificatio
      this folder). Point it at a disk with a few GB free. It must exist and be owned by
      the `PUID` user, e.g. `mkdir -p /data/bandcamp-tmp`.
    - `PUID` / `PGID`: output of `id -u` and `id -g` (the user that should own the files).
-   - `SYNC_TIME` / `TZ`: when to run each day.
+   - `SYNC_TIME` / `TZ`: when to run each day. Or `SYNC_EVERY=1h` to sync every hour
+     instead (also e.g. `30m`, `6h`; runs line up with the clock).
 
    Paths in `.env` are paths **on the Ubuntu machine**. Inside the container they always
    appear as `/music` and `/work`, so nothing else needs changing.
@@ -267,7 +269,9 @@ cookie expires or a sync fails:
    docker compose run --rm bandcamp-sync python /app/scheduler.py --test-notify
    ```
 
-The login is checked on every daily run, so you hear about an expired cookie the same day.
+The login is checked on every scheduled run, so you hear about an expired cookie the same day.
+With `SYNC_EVERY=1h` the "sync done" summary arrives every hour; set `NOTIFY_SYNC=false`
+if that's too many.
 
 ## Safety checks built in
 

@@ -2,11 +2,14 @@
 """
 Bandcamp Download 2.0 scheduler.
 
-Runs `bandcamp_download.py --sync -y` once a day. This is the Docker container's
-main process.
+Runs `bandcamp_download.py --sync -y` on a schedule: once a day at SYNC_TIME, or
+every SYNC_EVERY (e.g. every hour). This is the Docker container's main process.
 
 Settings (environment variables):
   SYNC_TIME     time of day to run, 24h HH:MM in the container's TZ (default 04:00)
+  SYNC_EVERY    run repeatedly instead of daily, e.g. 1h, 30m, 6h. Runs line up with
+                the clock from midnight (1h = on every hour, 6h = 00:00, 06:00, ...).
+                Overrides SYNC_TIME when set.
   TZ            time zone, e.g. America/New_York (default UTC)
   RUN_ON_START  "true" to also run a sync as soon as the container starts
   SYNC_ARGS     extra arguments for the sync, e.g. "--format mp3-320"
@@ -46,8 +49,35 @@ def parse_time(s):
         sys.exit(f"SYNC_TIME must look like 04:00, got {s!r}")
 
 
-def next_run(at):
-    now = datetime.datetime.now()
+def parse_every(s):
+    """'1h', '30m', '90m', '6h' -> minutes (None if empty)."""
+    s = s.strip().lower()
+    if not s:
+        return None
+    try:
+        if s.endswith("h"):
+            mins = int(float(s[:-1]) * 60)
+        elif s.endswith("m"):
+            mins = int(s[:-1])
+        else:
+            raise ValueError
+    except ValueError:
+        sys.exit(f"SYNC_EVERY must look like 1h or 30m, got {s!r}")
+    if not 5 <= mins <= 24 * 60:
+        sys.exit("SYNC_EVERY must be between 5m and 24h")
+    return mins
+
+
+def next_run(at, every=None, now=None):
+    """Next run after now: daily at `at`, or every `every` minutes counted from midnight.
+    A run that's still going when the next slot comes just skips that slot."""
+    now = now or datetime.datetime.now()
+    if every:
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        done = int((now - midnight).total_seconds() // 60) // every + 1
+        run = midnight + datetime.timedelta(minutes=done * every)
+        next_midnight = midnight + datetime.timedelta(days=1)
+        return min(run, next_midnight)
     run = now.replace(hour=at.hour, minute=at.minute, second=0, microsecond=0)
     return run if run > now else run + datetime.timedelta(days=1)
 
@@ -94,7 +124,7 @@ def run_sync():
 
     if code == EXIT_NOT_LOGGED_IN:
         notify("Bandcamp Download: login cookie expired",
-               "The daily sync can't log in to Bandcamp, so new shows won't download.\n"
+               "The scheduled sync can't log in to Bandcamp, so new shows won't download.\n"
                "Fix: on the server, in the bandcamp_download folder, run\n"
                "  python3 bandcamp_download.py --set-identity\n"
                "then: docker compose up -d",
@@ -128,13 +158,16 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     clean_leftovers()
     at = parse_time(os.environ.get("SYNC_TIME", "04:00"))
+    every = parse_every(os.environ.get("SYNC_EVERY", ""))
     tz = os.environ.get("TZ", "UTC")
-    log(f"Bandcamp Download 2.0 scheduler started: daily at {at:%H:%M} ({tz}), "
+    when_desc = (f"every {every // 60}h" if every and every % 60 == 0 else
+                 f"every {every}m" if every else f"daily at {at:%H:%M}")
+    log(f"Bandcamp Download 2.0 scheduler started: {when_desc} ({tz}), "
         f"syncing into {os.environ.get('BANDCAMP_SYNC_DEST', '?')}")
     if os.environ.get("RUN_ON_START", "").lower() in ("1", "true", "yes"):
         run_sync()
     while True:
-        when = next_run(at)
+        when = next_run(at, every)
         log(f"Next sync at {when:%Y-%m-%d %H:%M}")
         # Sleep in short steps so a clock change or a laptop-style suspend can't make us skip a day.
         while datetime.datetime.now() < when:

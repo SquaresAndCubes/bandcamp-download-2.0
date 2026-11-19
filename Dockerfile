@@ -3,7 +3,7 @@ FROM python:3.12-slim
 LABEL org.opencontainers.image.title="Bandcamp Download 2.0" \
       org.opencontainers.image.version="2.0"
 
-# tzdata so TZ=Europe/London etc. works for the daily schedule.
+# tzdata so TZ=Europe/London etc. works for the schedule.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends tzdata \
  && rm -rf /var/lib/apt/lists/*
