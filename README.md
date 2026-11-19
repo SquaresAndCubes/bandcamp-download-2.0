@@ -1,6 +1,6 @@
 # Bandcamp Download 2.0
 
-Downloads STS9 shows from the `squaresandcubes` Bandcamp collection into a music
+Downloads STS9 shows from a user's Bandcamp collection into a music
 folder, one folder per show, named after the show's Bandcamp URL slug
 (e.g. `20261114-royal-oak-music-theatre-royal-oak-mi`).
 
