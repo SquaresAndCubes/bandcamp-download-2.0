@@ -12,8 +12,9 @@ Settings (environment variables):
   SYNC_ARGS     extra arguments for the sync, e.g. "--format mp3-320"
   NOTIFY_URL    ntfy topic URL for push notifications, e.g. https://ntfy.sh/some-long-random-name
                 (sent when the login cookie expires or a sync fails; bandcamp_download.py
-                itself sends one for each show it downloads)
+                itself sends one for each show it downloads and a summary after each sync)
   NOTIFY_DOWNLOADS  "false" to skip the per-show "new show" notifications
+  NOTIFY_SYNC   "false" to skip the "sync done" summary after each sync
   NOTIFY_TOKEN  access token, only if your ntfy topic is protected
 
 Test notifications with:  python scheduler.py --test-notify

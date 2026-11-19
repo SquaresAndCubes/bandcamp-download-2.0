@@ -66,13 +66,15 @@ Login:
 Notifications:
   If NOTIFY_URL is set (an ntfy topic, e.g. https://ntfy.sh/your-long-random-topic),
   every show that downloads sends a push notification, however the script was
-  started (picker, --latest, --sync, by hand or by the Docker scheduler).
-  NOTIFY_DOWNLOADS=false turns these off; NOTIFY_TOKEN is for protected topics.
+  started (picker, --latest, --sync, by hand or by the Docker scheduler), and
+  every --sync ends with a summary notification, even when nothing was new.
+  NOTIFY_DOWNLOADS=false / NOTIFY_SYNC=false turn these off; NOTIFY_TOKEN is for
+  protected topics.
 
 Settings come from environment variables or the matching lines in .env
 (BANDCAMP_IDENTITY, BANDCAMP_COLLECTION_URL, BANDCAMP_SYNC_DEST,
 BANDCAMP_SYNC_BAND, BANDCAMP_TEMP_DIR, BANDCAMP_LOG_DIR, NOTIFY_URL,
-NOTIFY_DOWNLOADS, NOTIFY_TOKEN); see the constants below.
+NOTIFY_DOWNLOADS, NOTIFY_SYNC, NOTIFY_TOKEN); see the constants below.
 
 Exit codes: 0 ok, 1 error or some shows failed, 3 not logged in.
 """
@@ -132,6 +134,8 @@ LOG_DIR = os.environ.get("BANDCAMP_LOG_DIR") or os.path.dirname(os.path.abspath(
 # Push notification for each downloaded show, via ntfy [NOTIFY_URL, NOTIFY_DOWNLOADS, NOTIFY_TOKEN]
 NOTIFY_URL = (os.environ.get("NOTIFY_URL") or "").strip()
 NOTIFY_DOWNLOADS = (os.environ.get("NOTIFY_DOWNLOADS") or "true").strip().lower() in ("1", "true", "yes")
+# Summary notification at the end of every --sync, even when nothing was new [NOTIFY_SYNC]
+NOTIFY_SYNC = (os.environ.get("NOTIFY_SYNC") or "true").strip().lower() in ("1", "true", "yes")
 INTERACTIVE = sys.stdout.isatty()  # in Docker logs, show progress in steps instead of live
 COPY_WORKERS = 4         # files copied to --dest at the same time
 COPY_CHUNK = 4 * 2**20   # 4 MB reads/writes; large chunks suit network shares
@@ -143,22 +147,48 @@ class DownloadError(Exception):
     pass
 
 
-def notify_download(title, dest):
-    """Tell NOTIFY_URL (ntfy) that a show downloaded. Never stops the download run."""
-    if not (NOTIFY_URL and NOTIFY_DOWNLOADS):
-        return
-    headers = {"Title": "Bandcamp Download: new show", "Tags": "musical_note"}
+def send_notification(title, message, tags="", priority="default"):
+    """Post to NOTIFY_URL (ntfy). Never stops the run if it can't be sent."""
+    headers = {"Title": title, "Priority": priority}
+    if tags:
+        headers["Tags"] = tags
     token = (os.environ.get("NOTIFY_TOKEN") or "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     try:
-        req = urllib.request.Request(NOTIFY_URL, data=f"{title}\n{os.path.basename(dest)}".encode(),
-                                     headers=headers, method="POST")
+        req = urllib.request.Request(NOTIFY_URL, data=message.encode(), headers=headers, method="POST")
         with urllib.request.urlopen(req, timeout=30) as r:
             r.read()
         print("  Notification sent")
     except Exception as e:
         print(f"  (Couldn't send notification: {e})")
+
+
+def notify_download(title, dest):
+    """One notification per downloaded show [NOTIFY_DOWNLOADS]."""
+    if NOTIFY_URL and NOTIFY_DOWNLOADS:
+        send_notification("Bandcamp Download: new show",
+                          f"{title}\n{os.path.basename(dest)}", tags="musical_note")
+
+
+def notify_sync_done(n_saved, failed, n_total, dest):
+    """Summary at the end of every --sync, including when nothing was new [NOTIFY_SYNC]."""
+    if not (NOTIFY_URL and NOTIFY_SYNC):
+        return
+    have = n_total - len(failed)
+    if failed:
+        send_notification(
+            f"Bandcamp Download: sync done, {len(failed)} failed",
+            f"{n_saved} new, {len(failed)} failed:\n" + "\n".join(failed)
+            + f"\n{have} of {n_total} shows in {dest}",
+            tags="warning", priority="high")
+    elif n_saved:
+        send_notification(
+            f"Bandcamp Download: sync done, {n_saved} new show{'s' if n_saved != 1 else ''}",
+            f"All {n_total} shows are in {dest}", tags="white_check_mark")
+    else:
+        send_notification("Bandcamp Download: sync done, nothing new",
+                          f"All {n_total} shows are already in {dest}", tags="white_check_mark")
 
 
 def build_opener(identity):
@@ -750,6 +780,8 @@ def main():
             print(f"  (skipping, no download on Bandcamp: {it['item_title']})")
         if not missing:
             print("Nothing to download: everything is already there.")
+            if not args.list and not args.dry_run:
+                notify_sync_done(0, [], len(shows), args.dest)
             return
         print(f"\n{len(missing)} not downloaded yet:")
         print_menu(missing)
@@ -821,6 +853,8 @@ def main():
     print(f"\nDone: {len(saved)} succeeded, {len(failed)} failed.")
     for t in failed:
         print("  failed:", t)
+    if args.sync and not args.dry_run:
+        notify_sync_done(len(saved), failed, len(shows), args.dest)
     if failed:
         sys.exit(1)
 
