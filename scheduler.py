@@ -19,6 +19,9 @@ Settings (environment variables):
   NOTIFY_DOWNLOADS  "false" to skip the per-show "new show" notifications
   NOTIFY_SYNC   "false" to skip the "sync done" summary after each sync
   NOTIFY_TOKEN  access token, only if your ntfy topic is protected
+  SYNC_LOG_FILE also append everything to this file (Docker: /logs/sync.log, which is
+                the logs/ folder on the host). It survives container updates; at 5 MB
+                it's renamed to sync.log.1 (replacing the old one) and a new one starts.
 
 Test notifications with:  python scheduler.py --test-notify
 """
@@ -37,8 +40,34 @@ import urllib.request
 SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bandcamp_download.py")
 
 
+LOG_FILE = os.environ.get("SYNC_LOG_FILE", "").strip()
+LOG_MAX_BYTES = 5 * 2**20
+
+
+def write_log_file(text):
+    """Append to SYNC_LOG_FILE, if set. A problem with the file never stops the sync."""
+    global LOG_FILE
+    if not LOG_FILE:
+        return
+    try:
+        if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > LOG_MAX_BYTES:
+            os.replace(LOG_FILE, LOG_FILE + ".1")
+        with open(LOG_FILE, "a") as f:
+            f.write(text)
+    except OSError as e:
+        print(f"Can't write the log file {LOG_FILE} ({e}); logging to Docker only from now on.",
+              flush=True)
+        LOG_FILE = ""
+
+
+def out(text):
+    """Print to the container log and append to the log file."""
+    print(text, end="", flush=True)
+    write_log_file(text)
+
+
 def log(msg):
-    print(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] {msg}", flush=True)
+    out(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] {msg}\n")
 
 
 def parse_time(s):
@@ -116,7 +145,7 @@ def run_sync():
     tail = collections.deque(maxlen=12)
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
     for line in proc.stdout:
-        print(line, end="", flush=True)
+        out(line)
         tail.append(line.rstrip())
     code = proc.wait()
     mins = (time.monotonic() - start) / 60
@@ -164,6 +193,8 @@ def main():
                  f"every {every}m" if every else f"daily at {at:%H:%M}")
     log(f"Bandcamp Download 2.0 scheduler started: {when_desc} ({tz}), "
         f"syncing into {os.environ.get('BANDCAMP_SYNC_DEST', '?')}")
+    if LOG_FILE:
+        log(f"Also logging to {LOG_FILE}")
     if os.environ.get("RUN_ON_START", "").lower() in ("1", "true", "yes"):
         run_sync()
     while True:

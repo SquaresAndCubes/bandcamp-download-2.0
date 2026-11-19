@@ -36,6 +36,13 @@ services:
         target: /work
         bind:
           create_host_path: false
+      # Sync log file (sync.log), kept when the container is updated or recreated.
+      # Must be writable by PUID.
+      - type: bind
+        source: ${LOGS_DIR:-./logs}
+        target: /logs
+        bind:
+          create_host_path: false
     logging:
       driver: json-file
       options:

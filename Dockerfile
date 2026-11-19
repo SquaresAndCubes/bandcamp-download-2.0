@@ -17,6 +17,7 @@ ENV PYTHONUNBUFFERED=1 \
     SYNC_TIME=04:00 \
     BANDCAMP_SYNC_DEST=/music \
     BANDCAMP_TEMP_DIR=/tmp \
-    BANDCAMP_LOG_DIR=/music/.bandcamp-sync-logs
+    BANDCAMP_LOG_DIR=/music/.bandcamp-sync-logs \
+    SYNC_LOG_FILE=/logs/sync.log
 
 CMD ["python", "-u", "/app/scheduler.py"]

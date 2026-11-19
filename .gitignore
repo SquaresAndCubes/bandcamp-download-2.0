@@ -12,6 +12,9 @@
 # Keep the (empty) tmp/ folder: docker-compose.yml mounts it as the default TEMP_DIR.
 !tmp/
 !tmp/.gitkeep
+# Same for logs/, the default LOGS_DIR (the log files themselves stay ignored).
+!logs/
+!logs/.gitkeep
 
 # Private: never commit these (they hold your Bandcamp login cookie).
 .env

@@ -208,6 +208,8 @@ and can send you notifications.
    - `TEMP_DIR`: where zips are kept while each show downloads (default `./tmp`, inside
      this folder). Point it at a disk with a few GB free. It must exist and be owned by
      the `PUID` user, e.g. `mkdir -p /data/bandcamp-tmp`.
+   - `LOGS_DIR`: where the sync log `sync.log` is kept (default `./logs`, inside this
+     folder). Same rules as `TEMP_DIR`.
    - `PUID` / `PGID`: output of `id -u` and `id -g` (the user that should own the files).
    - `SYNC_TIME` / `TZ`: when to run each day. Or `SYNC_EVERY=1h` to sync every hour
      instead (also e.g. `30m`, `6h`; runs line up with the clock).
@@ -242,6 +244,7 @@ and can send you notifications.
 
 ```bash
 docker compose logs -f                      # watch what it's doing
+tail -n 100 logs/sync.log                   # past syncs (kept across updates; logs/sync.log.1 is older)
 docker compose run --rm bandcamp-sync python /app/bandcamp_download.py --sync --yes   # sync now
 docker compose run --rm bandcamp-sync python /app/bandcamp_download.py --fix-names   # fix folder names
 docker compose up -d                        # after editing .env (restart alone doesn't reload it)
