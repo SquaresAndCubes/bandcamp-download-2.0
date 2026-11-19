@@ -63,9 +63,16 @@ Login:
   --set-identity  paste a new identity cookie (input hidden, or piped in); it's
                checked with Bandcamp, then saved to identity.txt and .env.
 
+Notifications:
+  If NOTIFY_URL is set (an ntfy topic, e.g. https://ntfy.sh/your-long-random-topic),
+  every show that downloads sends a push notification, however the script was
+  started (picker, --latest, --sync, by hand or by the Docker scheduler).
+  NOTIFY_DOWNLOADS=false turns these off; NOTIFY_TOKEN is for protected topics.
+
 Settings come from environment variables or the matching lines in .env
 (BANDCAMP_IDENTITY, BANDCAMP_COLLECTION_URL, BANDCAMP_SYNC_DEST,
-BANDCAMP_SYNC_BAND, BANDCAMP_TEMP_DIR, BANDCAMP_LOG_DIR); see the constants below.
+BANDCAMP_SYNC_BAND, BANDCAMP_TEMP_DIR, BANDCAMP_LOG_DIR, NOTIFY_URL,
+NOTIFY_DOWNLOADS, NOTIFY_TOKEN); see the constants below.
 
 Exit codes: 0 ok, 1 error or some shows failed, 3 not logged in.
 """
@@ -89,7 +96,7 @@ import urllib.request
 import zipfile
 
 def load_env_file(path):
-    """Read BANDCAMP_* settings from a .env file (KEY=value lines) next to this
+    """Read BANDCAMP_* and NOTIFY_* settings from a .env file (KEY=value lines) next to this
     script, so your own collection, folders and cookie live in that private file
     instead of in the code. Real environment variables win over the file."""
     try:
@@ -98,7 +105,7 @@ def load_env_file(path):
     except OSError:
         return
     for line in lines:
-        m = re.match(r"\s*(BANDCAMP_[A-Z_]+)\s*=\s*(.*?)\s*$", line)
+        m = re.match(r"\s*((?:BANDCAMP|NOTIFY)_[A-Z_]+)\s*=\s*(.*?)\s*$", line)
         if m and m.group(1) not in os.environ:
             value = m.group(2)
             if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
@@ -122,6 +129,9 @@ SYNC_BAND = os.environ.get("BANDCAMP_SYNC_BAND") or "STS9"                      
 TEMP_ROOT = os.environ.get("BANDCAMP_TEMP_DIR") or os.path.expanduser("~/Downloads")
 # Undo scripts from --fix-names go here [BANDCAMP_LOG_DIR]
 LOG_DIR = os.environ.get("BANDCAMP_LOG_DIR") or os.path.dirname(os.path.abspath(__file__))
+# Push notification for each downloaded show, via ntfy [NOTIFY_URL, NOTIFY_DOWNLOADS, NOTIFY_TOKEN]
+NOTIFY_URL = (os.environ.get("NOTIFY_URL") or "").strip()
+NOTIFY_DOWNLOADS = (os.environ.get("NOTIFY_DOWNLOADS") or "true").strip().lower() in ("1", "true", "yes")
 INTERACTIVE = sys.stdout.isatty()  # in Docker logs, show progress in steps instead of live
 COPY_WORKERS = 4         # files copied to --dest at the same time
 COPY_CHUNK = 4 * 2**20   # 4 MB reads/writes; large chunks suit network shares
@@ -131,6 +141,24 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
 
 class DownloadError(Exception):
     pass
+
+
+def notify_download(title, dest):
+    """Tell NOTIFY_URL (ntfy) that a show downloaded. Never stops the download run."""
+    if not (NOTIFY_URL and NOTIFY_DOWNLOADS):
+        return
+    headers = {"Title": "Bandcamp Download: new show", "Tags": "musical_note"}
+    token = (os.environ.get("NOTIFY_TOKEN") or "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        req = urllib.request.Request(NOTIFY_URL, data=f"{title}\n{os.path.basename(dest)}".encode(),
+                                     headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=30) as r:
+            r.read()
+        print("  Notification sent")
+    except Exception as e:
+        print(f"  (Couldn't send notification: {e})")
 
 
 def build_opener(identity):
@@ -785,6 +813,7 @@ def main():
             download_show(opener, url, args.dest, show_slug(item), safe_name(title) + ".zip")
             print("  Saved to:", dest)
             saved.append(dest)
+            notify_download(title, dest)
         except Exception as e:
             print(f"  Failed: {e}")
             failed.append(title)

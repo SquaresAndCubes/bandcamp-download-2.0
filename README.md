@@ -249,14 +249,16 @@ docker compose down                         # stop it
 
 ### Notifications (optional)
 
-Get a push notification on your phone when the login cookie expires, when a sync fails,
-or when new shows are downloaded:
+Get a push notification on your phone for every show that downloads, and when the
+login cookie expires or a sync fails:
 
 1. Install the **ntfy** app (iPhone/Android) and subscribe to a topic with a long, random
    name, e.g. `sts9-sync-7f3k9q2m`. Anyone who knows the name can read the messages,
    so don't use something guessable.
 2. In `.env`: `NOTIFY_URL=https://ntfy.sh/sts9-sync-7f3k9q2m`
    (and `NOTIFY_DOWNLOADS=false` if you only want problems).
+   This also works without Docker: the same `.env` line makes `bandcamp_download.py`
+   send a notification for each show it downloads, however you run it.
 3. Apply and send a test:
 
    ```bash

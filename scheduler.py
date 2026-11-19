@@ -11,8 +11,9 @@ Settings (environment variables):
   RUN_ON_START  "true" to also run a sync as soon as the container starts
   SYNC_ARGS     extra arguments for the sync, e.g. "--format mp3-320"
   NOTIFY_URL    ntfy topic URL for push notifications, e.g. https://ntfy.sh/some-long-random-name
-                (sent when the login cookie expires, when a sync fails, and when shows download)
-  NOTIFY_DOWNLOADS  "false" to skip the "new shows downloaded" notification
+                (sent when the login cookie expires or a sync fails; bandcamp_download.py
+                itself sends one for each show it downloads)
+  NOTIFY_DOWNLOADS  "false" to skip the per-show "new show" notifications
   NOTIFY_TOKEN  access token, only if your ntfy topic is protected
 
 Test notifications with:  python scheduler.py --test-notify
@@ -80,14 +81,12 @@ def run_sync():
     cmd = [sys.executable, "-u", SCRIPT, "--sync", "--yes"] + shlex.split(os.environ.get("SYNC_ARGS", ""))
     log("Starting sync: " + " ".join(shlex.quote(c) for c in cmd[2:]))
     start = time.monotonic()
-    # Pass the output through to the log, keeping what the notifications need.
-    tail, saved = collections.deque(maxlen=12), []
+    # Pass the output through to the log, keeping the end for a failure notification.
+    tail = collections.deque(maxlen=12)
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
     for line in proc.stdout:
         print(line, end="", flush=True)
         tail.append(line.rstrip())
-        if line.strip().startswith("Saved to:"):
-            saved.append(os.path.basename(line.split("Saved to:", 1)[1].strip()))
     code = proc.wait()
     mins = (time.monotonic() - start) / 60
     log(f"Sync {'finished' if code == 0 else f'FAILED (exit code {code})'} after {mins:.1f} min")
@@ -103,9 +102,6 @@ def run_sync():
         notify("Bandcamp Download: sync failed",
                f"Exit code {code}. Last output:\n" + "\n".join(l for l in tail if l.strip()),
                priority="high", tags="warning")
-    if saved and os.environ.get("NOTIFY_DOWNLOADS", "true").lower() in ("1", "true", "yes"):
-        notify(f"Bandcamp Download: {len(saved)} new show{'s' if len(saved) != 1 else ''}",
-               "\n".join(saved), tags="musical_note")
 
 
 def clean_leftovers():
