@@ -1,4 +1,4 @@
-# Bandcamp STS9 sync
+# Bandcamp Download 2.0
 
 Downloads STS9 shows from the `squaresandcubes` Bandcamp collection into a music
 folder, one folder per show, named after the show's Bandcamp URL slug

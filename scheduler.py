@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+Bandcamp Download 2.0 scheduler.
+
 Runs `bandcamp_latest.py --sync -y` once a day. This is the Docker container's
 main process.
 
@@ -91,18 +93,18 @@ def run_sync():
     log(f"Sync {'finished' if code == 0 else f'FAILED (exit code {code})'} after {mins:.1f} min")
 
     if code == EXIT_NOT_LOGGED_IN:
-        notify("Bandcamp sync: login cookie expired",
+        notify("Bandcamp Download: login cookie expired",
                "The daily sync can't log in to Bandcamp, so new shows won't download.\n"
                "Fix: on the server, in the bandcamp_download folder, run\n"
                "  python3 bandcamp_latest.py --set-identity\n"
                "then: docker compose up -d",
                priority="high", tags="warning,key")
     elif code != 0:
-        notify("Bandcamp sync failed",
+        notify("Bandcamp Download: sync failed",
                f"Exit code {code}. Last output:\n" + "\n".join(l for l in tail if l.strip()),
                priority="high", tags="warning")
     if saved and os.environ.get("NOTIFY_DOWNLOADS", "true").lower() in ("1", "true", "yes"):
-        notify(f"Bandcamp sync: {len(saved)} new show{'s' if len(saved) != 1 else ''}",
+        notify(f"Bandcamp Download: {len(saved)} new show{'s' if len(saved) != 1 else ''}",
                "\n".join(saved), tags="musical_note")
 
 
@@ -123,14 +125,14 @@ def main():
     if "--test-notify" in sys.argv[1:]:
         if not os.environ.get("NOTIFY_URL", "").strip():
             sys.exit("NOTIFY_URL isn't set in .env")
-        ok = notify("Bandcamp sync: test", "Notifications are working.", tags="white_check_mark")
+        ok = notify("Bandcamp Download: test", "Notifications are working.", tags="white_check_mark")
         sys.exit(0 if ok else 1)
     # `docker stop` sends SIGTERM; exit right away instead of waiting out the sleep.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     clean_leftovers()
     at = parse_time(os.environ.get("SYNC_TIME", "04:00"))
     tz = os.environ.get("TZ", "UTC")
-    log(f"Bandcamp sync scheduler started: daily at {at:%H:%M} ({tz}), "
+    log(f"Bandcamp Download 2.0 scheduler started: daily at {at:%H:%M} ({tz}), "
         f"syncing into {os.environ.get('BANDCAMP_SYNC_DEST', '?')}")
     if os.environ.get("RUN_ON_START", "").lower() in ("1", "true", "yes"):
         run_sync()

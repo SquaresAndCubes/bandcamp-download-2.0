@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+Bandcamp Download 2.0
+
 List the most recent shows in a Bandcamp fan collection, pick which ones to
 download, and download them.
 

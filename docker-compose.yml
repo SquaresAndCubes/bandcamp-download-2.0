@@ -1,8 +1,11 @@
+# Bandcamp Download 2.0
+name: bandcamp-download
+
 services:
   bandcamp-sync:
     build: .
-    image: bandcamp-sync
-    container_name: bandcamp-sync
+    image: bandcamp-download:2.0
+    container_name: bandcamp-download
     restart: unless-stopped
     # BANDCAMP_IDENTITY (your login cookie) and the settings below come from .env
     env_file: .env
