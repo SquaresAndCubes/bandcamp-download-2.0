@@ -2,7 +2,7 @@
 """
 Bandcamp Download 2.0 scheduler.
 
-Runs `bandcamp_latest.py --sync -y` once a day. This is the Docker container's
+Runs `bandcamp_download.py --sync -y` once a day. This is the Docker container's
 main process.
 
 Settings (environment variables):
@@ -29,7 +29,7 @@ import sys
 import time
 import urllib.request
 
-SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bandcamp_latest.py")
+SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bandcamp_download.py")
 
 
 def log(msg):
@@ -50,7 +50,7 @@ def next_run(at):
     return run if run > now else run + datetime.timedelta(days=1)
 
 
-EXIT_NOT_LOGGED_IN = 3  # matches bandcamp_latest.py
+EXIT_NOT_LOGGED_IN = 3  # matches bandcamp_download.py
 
 
 def notify(title, message, priority="default", tags=""):
@@ -96,7 +96,7 @@ def run_sync():
         notify("Bandcamp Download: login cookie expired",
                "The daily sync can't log in to Bandcamp, so new shows won't download.\n"
                "Fix: on the server, in the bandcamp_download folder, run\n"
-               "  python3 bandcamp_latest.py --set-identity\n"
+               "  python3 bandcamp_download.py --set-identity\n"
                "then: docker compose up -d",
                priority="high", tags="warning,key")
     elif code != 0:

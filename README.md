@@ -4,22 +4,166 @@ Downloads STS9 shows from the `squaresandcubes` Bandcamp collection into a music
 folder, one folder per show, named after the show's Bandcamp URL slug
 (e.g. `20261114-royal-oak-music-theatre-royal-oak-mi`).
 
-The Docker container runs `bandcamp_latest.py --sync --yes` once a day: it scans
-the whole collection and downloads every STS9 release that isn't already in the
-music folder.
+## Two ways to use it
+
+**Docker is optional.** Everything is done by one script, `bandcamp_download.py`, and you
+can run it on its own on any machine with Python 3.8+ (macOS and Ubuntu already have it).
+Nothing to install: it only uses Python's standard library.
+
+| | Just the script | Docker |
+|---|---|---|
+| What you need | Python 3 | Docker |
+| How it runs | When you run it | Automatically, once a day |
+| Good for | Picking shows by hand, a one-off sync, fixing folder names | A server that keeps the music folder up to date unattended |
+| Instructions | [Using the script on its own](#using-the-script-on-its-own) | [Running it daily with Docker](#running-it-daily-with-docker-optional) |
+
+Quick start without Docker:
+
+```bash
+git clone https://github.com/SquaresAndCubes/bandcamp-download-2.0.git
+cd bandcamp-download-2.0
+python3 bandcamp_download.py --set-identity      # log in once (see below)
+python3 bandcamp_download.py --dest ~/Music/STS9  # pick shows to download
+```
+
+The Docker setup just runs `bandcamp_download.py --sync --yes` on a schedule. Want a daily
+sync without Docker? A cron job does the same:
+
+```bash
+# crontab -e   (every day at 04:00)
+0 4 * * * cd /path/to/bandcamp-download-2.0 && python3 bandcamp_download.py --sync --yes --dest /path/to/STS9 >> sync.log 2>&1
+```
 
 ## Files
 
-| File | What it is |
-|---|---|
-| `bandcamp_latest.py` | The downloader. Also runs on its own (see `--help`). |
-| `scheduler.py` | Container main process: runs the sync daily at `SYNC_TIME`. |
-| `Dockerfile`, `docker-compose.yml` | The container. |
-| `.env` | **Private.** Your Bandcamp login cookie and settings. Never commit or share it. |
-| `.env.example` | Template for `.env`. |
-| `identity.txt` | **Private.** The login cookie for running the script directly on the Mac. |
+| File | What it is | Needed for |
+|---|---|---|
+| `bandcamp_download.py` | The downloader. | Both |
+| `identity.txt` | **Private.** Your Bandcamp login cookie, for running the script directly. Created by `--set-identity`. | Script |
+| `scheduler.py` | Runs the sync daily at `SYNC_TIME` and sends notifications. | Docker |
+| `Dockerfile`, `docker-compose.yml` | The container. | Docker |
+| `.env` | **Private.** Login cookie and settings for the container. Never commit or share it. | Docker |
+| `.env.example` | Template for `.env`. | Docker |
 
-## Deploy on Ubuntu
+## Using the script on its own
+
+`bandcamp_download.py` runs with Python 3.8+ and needs nothing installed (standard library
+only). Run `python3 bandcamp_download.py --help` for a short summary.
+
+### Logging in
+
+Bandcamp only gives download links to the logged-in owner of the collection, so the script
+needs your Bandcamp `identity` cookie:
+
+1. Log in at https://bandcamp.com in your browser.
+2. Open DevTools → Application (Storage in Firefox) → Cookies → `https://bandcamp.com`.
+3. Copy the value of the cookie named `identity`.
+4. Save it with `python3 bandcamp_download.py --set-identity` (paste it; it's checked with
+   Bandcamp, then saved to `identity.txt` and `.env`). Or put it in `identity.txt` yourself
+   (one line, nothing else), or set `BANDCAMP_IDENTITY='<value>'` when running the script.
+
+Listing shows works without logging in; downloading doesn't.
+
+### Picking shows to download
+
+```bash
+python3 bandcamp_download.py --dest ~/Music/STS9
+```
+
+This lists the 10 most recent items in the collection and asks which to download. At the
+prompt, enter numbers like `1`, `1,3` or `2-5`, `a` for all, Enter for the newest show, or
+`q` to quit.
+
+Each show is extracted into a folder named after the slug in its Bandcamp URL, e.g.
+`https://sts9.bandcamp.com/album/20261114-royal-oak-music-theatre-royal-oak-mi` →
+`<dest>/20261114-royal-oak-music-theatre-royal-oak-mi/`. Shows whose folder already exists
+are skipped.
+
+The `.zip` files are never kept: each one goes in a temp folder (`bandcamp-dl-<random>`,
+in `~/Downloads` by default) that's deleted after the show, even if the download or
+extraction fails. The extracted files are then copied into `--dest`, 4 at a time, which
+is quicker on network shares.
+
+| Option | What it does |
+|---|---|
+| `--count N` | How many recent shows to list (default 10). |
+| `--latest` | Skip the prompt and download only the newest show. |
+| `--format F` | `flac` (default), `mp3-320`, `mp3-v0`, `aac-hi`, `vorbis`, `alac`, `wav` or `aiff-lossless`. |
+| `--dest DIR` | Folder the show folders go in (default: current folder; with `--sync` or `--fix-names`, `/Volumes/music/FLAC/STS9`). `--out` is another name for it. |
+| `--list` | Only show the list; don't download. |
+| `--dry-run` | Get the download links but don't download. With `--latest`, a quick way to check the login works. |
+| `--url URL` | A different Bandcamp collection (default `https://bandcamp.com/squaresandcubes`). |
+
+### Syncing the whole collection
+
+```bash
+python3 bandcamp_download.py --sync
+```
+
+Scans the **whole** collection (not just the newest 20) and downloads every release that
+isn't already in `--dest`. It lists what's missing and asks before downloading.
+
+A release counts as already downloaded if a folder has its slug as the name, or, for
+folders named differently (older Bandcamp names, other date formats), the same date and a
+venue word in common, or a date within 3 days and at least 3 venue words in common. Night
+numbers (N1 / night-2) and soundchecks must agree. Every such match is printed so you can
+check it.
+
+| Option | What it does |
+|---|---|
+| `--sync` | Download everything missing from `--dest`. Add `--list` to only see what's missing. |
+| `--band NAME` | Only sync this artist (default `STS9`; `all` for everything). |
+| `--yes`, `-y` | Don't ask for confirmation (for scheduled runs). |
+| `--allow-empty` | Allow syncing into an empty folder. Normally refused, because an empty folder usually means the network share isn't mounted, and syncing would re-download the whole collection. |
+
+### Fixing folder names
+
+```bash
+python3 bandcamp_download.py --fix-names --list   # preview
+python3 bandcamp_download.py --fix-names          # rename (asks first)
+```
+
+Renames show folders in `--dest` whose names don't match the current Bandcamp slug (for
+example because Bandcamp renamed the release), using the same matching as `--sync`. It shows
+every rename and asks first, flags renames where the date differs, and writes an
+`undo_renames_<time>.sh` script that reverses them.
+
+### Updating the login cookie
+
+```bash
+python3 bandcamp_download.py --set-identity
+```
+
+Asks for a new `identity` cookie without showing what you paste (it can also be piped in,
+e.g. `pbpaste | ssh server '… --set-identity'`), checks with Bandcamp that it's logged in to
+the collection's account, then saves it to `identity.txt` and `.env` next to the script.
+Nothing is saved if the check fails.
+
+### Settings
+
+Defaults are at the top of the script; each can also be set with an environment variable
+(this is how the Docker container configures them):
+
+| Variable | Default | What it is |
+|---|---|---|
+| `BANDCAMP_IDENTITY` | contents of `identity.txt` | Login cookie. |
+| `BANDCAMP_COLLECTION_URL` | `https://bandcamp.com/squaresandcubes` | Collection to download from. |
+| `BANDCAMP_SYNC_DEST` | `/Volumes/music/FLAC/STS9` | Default `--dest` for `--sync` / `--fix-names`. |
+| `BANDCAMP_SYNC_BAND` | `STS9` | Default `--band`. |
+| `BANDCAMP_TEMP_DIR` | `~/Downloads` | Where zips are downloaded and unpacked temporarily. |
+| `BANDCAMP_LOG_DIR` | the script's folder | Where `--fix-names` writes undo scripts. |
+
+### Exit codes
+
+`0` success · `1` error, or some shows failed · `3` not logged in (the cookie is missing,
+expired, or for another account). The scheduler uses `3` to send the "cookie expired" alert.
+
+## Running it daily with Docker (optional)
+
+Only needed if you want the sync to run by itself every day on a server. The container
+runs `bandcamp_download.py --sync --yes` once a day and can send you notifications.
+
+### Deploy on Ubuntu
 
 1. **Install Docker** (if needed):
 
@@ -32,11 +176,18 @@ music folder.
    (e.g. an `/etc/fstab` entry for your NAS). Note the path of the STS9 folder,
    for example `/mnt/music/FLAC/STS9`.
 
-3. **Copy this folder** to the Ubuntu machine, including the hidden `.env`:
+3. **Get the code onto the Ubuntu machine**, then copy your private `.env` over from the
+   Mac (it isn't in the repo):
 
    ```bash
-   scp -r ~/Documents/bandcamp_download user@ubuntu-host:~/
+   git clone https://github.com/SquaresAndCubes/bandcamp-download-2.0.git ~/bandcamp_download
    ```
+
+   ```bash
+   scp ~/Documents/bandcamp_download/.env user@ubuntu-host:~/bandcamp_download/
+   ```
+
+   No `.env` yet? Copy `.env.example` to `.env` and fill it in.
 
 4. **Edit `.env`** on the Ubuntu machine:
    - `MUSIC_DIR`: the STS9 folder from step 2.
@@ -53,7 +204,7 @@ music folder.
 
    ```bash
    cd ~/bandcamp_download
-   docker compose run --rm bandcamp-sync python /app/bandcamp_latest.py --sync --list
+   docker compose run --rm bandcamp-sync python /app/bandcamp_download.py --sync --list
    ```
 
    **Check the login cookie works on this machine** (gets the download link for the newest
@@ -61,7 +212,7 @@ music folder.
    need a fresh cookie (see below):
 
    ```bash
-   docker compose run --rm bandcamp-sync python /app/bandcamp_latest.py --latest --dry-run --dest /tmp
+   docker compose run --rm bandcamp-sync python /app/bandcamp_download.py --latest --dry-run --dest /tmp
    ```
 
 6. **Start it:**
@@ -72,32 +223,18 @@ music folder.
 
    It restarts by itself after reboots (`restart: unless-stopped`).
 
-## Day to day
+### Day to day
 
 ```bash
 docker compose logs -f                      # watch what it's doing
-docker compose run --rm bandcamp-sync python /app/bandcamp_latest.py --sync --yes   # sync now
-docker compose run --rm bandcamp-sync python /app/bandcamp_latest.py --fix-names   # fix folder names
-docker compose restart                      # after editing .env
-docker compose up -d --build                # after changing the code
+docker compose run --rm bandcamp-sync python /app/bandcamp_download.py --sync --yes   # sync now
+docker compose run --rm bandcamp-sync python /app/bandcamp_download.py --fix-names   # fix folder names
+docker compose up -d                        # after editing .env (restart alone doesn't reload it)
+git pull && docker compose up -d --build    # after updating the code
 docker compose down                         # stop it
 ```
 
-## Safety checks built in
-
-- If `MUSIC_DIR` doesn't exist, the container won't start (Docker won't create it).
-- If the folder exists but is **empty** (e.g. the share isn't mounted and you're looking
-  at the bare mount point), the sync refuses to run instead of re-downloading the whole
-  collection.
-- `.zip` files are never kept. They're downloaded and unpacked in `TEMP_DIR`, then copied
-  into the music folder and deleted. Each show needs roughly 2× its size free there while
-  it's processed. If the container is stopped mid-download, the leftovers are cleaned up
-  the next time it starts.
-- If `TEMP_DIR` doesn't exist the container won't start, and if it isn't writable the
-  sync stops with a message saying so (instead of every show failing).
-- A show that fails halfway leaves no partial folder, so it's retried on the next run.
-
-## Notifications (optional)
+### Notifications (optional)
 
 Get a push notification on your phone when the login cookie expires, when a sync fails,
 or when new shows are downloaded:
@@ -116,18 +253,45 @@ or when new shows are downloaded:
 
 The login is checked on every daily run, so you hear about an expired cookie the same day.
 
+## Safety checks built in
+
+These apply whether you run the script yourself or with Docker:
+
+- If the music folder doesn't exist, `--sync` stops (it won't create it). If it exists but
+  is **empty** (e.g. the network share isn't mounted and you're looking at the bare mount
+  point), `--sync` refuses to run instead of re-downloading the whole collection.
+- `.zip` files are never kept. They're downloaded and unpacked in a temp folder, then
+  copied into the music folder and deleted. Each show needs roughly 2× its size free there
+  while it's processed. If the temp folder isn't writable, the script stops with a message
+  saying so (instead of every show failing).
+- A show that fails halfway leaves no partial folder, so it's retried next time.
+
+With Docker, also:
+
+- If `MUSIC_DIR` or `TEMP_DIR` doesn't exist, the container won't start (Docker won't
+  create them).
+- If the container is stopped mid-download, the leftovers in `TEMP_DIR` are cleaned up the
+  next time it starts.
+
 ## When the login cookie expires
 
-The log (and the notification) will say the cookie expired. Bandcamp's login uses a
-CAPTCHA, so this can't be done automatically. Log in at bandcamp.com in a browser, copy the
-`identity` cookie (DevTools → Application → Cookies → `https://bandcamp.com` → `identity`),
-then on the server:
+The script says `Not logged in` (and with Docker, the log and the notification say the
+cookie expired). Bandcamp's login uses a CAPTCHA, so this can't be done automatically.
+Log in at bandcamp.com in a browser, copy the `identity` cookie (DevTools → Application →
+Cookies → `https://bandcamp.com` → `identity`), then, in the project folder:
 
 ```bash
-cd ~/bandcamp_download
-python3 bandcamp_latest.py --set-identity   # paste it; it's checked, then saved to .env
-docker compose up -d                        # restart the container with the new cookie
+python3 bandcamp_download.py --set-identity   # paste it; it's checked, then saved
+```
+
+That's all if you run the script yourself. With Docker, also restart the container so it
+picks up the new cookie:
+
+```bash
+docker compose up -d
 ```
 
 `--set-identity` doesn't show what you paste, refuses a cookie that isn't logged in to
-your account, and only needs the Python that comes with Ubuntu.
+your account, and only needs the Python that comes with macOS or Ubuntu. On a headless
+server, copy the cookie on your computer and pipe it over SSH:
+`pbpaste | ssh user@server 'cd ~/bandcamp_download && python3 bandcamp_download.py --set-identity'`.

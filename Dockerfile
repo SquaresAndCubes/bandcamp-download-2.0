@@ -10,7 +10,7 @@ RUN apt-get update \
 
 WORKDIR /app
 # Only the code goes in the image: the login cookie comes from .env at runtime.
-COPY bandcamp_latest.py scheduler.py ./
+COPY bandcamp_download.py scheduler.py ./
 
 ENV PYTHONUNBUFFERED=1 \
     TZ=UTC \

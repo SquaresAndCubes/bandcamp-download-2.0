@@ -11,8 +11,9 @@ so this script needs your Bandcamp `identity` cookie:
   1. Log in at https://bandcamp.com in your browser.
   2. Open DevTools -> Application/Storage -> Cookies -> https://bandcamp.com
   3. Copy the value of the cookie named `identity`.
-  4. Save it in identity.txt next to this script (one line, nothing else),
-     or run:  BANDCAMP_IDENTITY='<value>' python3 bandcamp_latest.py
+  4. Run:  python3 bandcamp_download.py --set-identity   (paste it; it's checked,
+     then saved to identity.txt and .env next to this script). Or save it in
+     identity.txt yourself (one line), or set BANDCAMP_IDENTITY='<value>'.
 
 At the prompt, enter numbers like `1`, `1,3`, `2-5`, `a` for all, Enter for the
 newest show, or `q` to quit.
@@ -20,9 +21,9 @@ newest show, or `q` to quit.
 Each show is extracted into a folder named after the slug in its Bandcamp URL,
 e.g. https://sts9.bandcamp.com/album/20261114-royal-oak-music-theatre-royal-oak-mi
 -> <dest>/20261114-royal-oak-music-theatre-royal-oak-mi/. The .zip files are never
-kept: they go in a temp folder in ~/Downloads (bandcamp-dl-<random>) that is
-deleted after each show, even if the download or extraction fails. Shows whose
-folder already exists are skipped.
+kept: they go in a temp folder (bandcamp-dl-<random>, in ~/Downloads by default)
+that is deleted after each show, even if the download or extraction fails.
+Shows whose folder already exists are skipped.
 
 Options:
   --count N  how many recent shows to list (default: 10)
@@ -32,14 +33,19 @@ Options:
              (--out still works as another name for --dest)
   --list     just show the list, don't download
   --dry-run  resolve the download URLs but don't download the files
+             (with --latest: a quick check that the login works)
+  --url      a different Bandcamp collection URL
 
 Sync mode:
   --sync     scan the WHOLE collection and download every show that isn't
              already in --dest (default: /Volumes/music/FLAC/STS9). Lists what's
              missing and asks before downloading. Combine with --list to only see
-             what's missing.
+             what's missing. Folders named differently (older Bandcamp names,
+             other date formats) still count if the date and venue match.
   --band     only sync this artist (default: STS9; use 'all' for everything)
   --yes, -y  don't ask for confirmation (e.g. for a scheduled job)
+  --allow-empty  allow syncing into an empty folder (normally refused, since it
+             usually means the network share isn't mounted)
 
 Fixing folder names:
   --fix-names  rename existing show folders in --dest (default: the sync folder)
@@ -47,6 +53,16 @@ Fixing folder names:
                Bandcamp renamed the release. Shows every rename and asks first;
                add --list to only preview. Writes undo_renames_<time>.sh next to
                this script to reverse it.
+
+Login:
+  --set-identity  paste a new identity cookie (input hidden, or piped in); it's
+               checked with Bandcamp, then saved to identity.txt and .env.
+
+Settings: see the constants below; each can be overridden with an environment
+variable (BANDCAMP_IDENTITY, BANDCAMP_COLLECTION_URL, BANDCAMP_SYNC_DEST,
+BANDCAMP_SYNC_BAND, BANDCAMP_TEMP_DIR, BANDCAMP_LOG_DIR).
+
+Exit codes: 0 ok, 1 error or some shows failed, 3 not logged in.
 """
 
 import argparse
@@ -534,7 +550,7 @@ def logged_in(data):
 
 def not_logged_in():
     print("Not logged in: the Bandcamp identity cookie is missing, expired, or for a different "
-          "account. Get a new one and run: python3 bandcamp_latest.py --set-identity",
+          "account. Get a new one and run: python3 bandcamp_download.py --set-identity",
           file=sys.stderr, flush=True)
     sys.exit(EXIT_NOT_LOGGED_IN)
 
