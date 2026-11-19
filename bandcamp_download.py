@@ -5,6 +5,11 @@ Bandcamp Download 2.0
 List the most recent shows in a Bandcamp fan collection, pick which ones to
 download, and download them.
 
+Setup: copy .env.example to .env (next to this script) and set
+BANDCAMP_COLLECTION_URL to your collection, e.g. https://bandcamp.com/your-username,
+and BANDCAMP_SYNC_DEST to your music folder (used by --sync / --fix-names).
+Or pass --url and --dest each time.
+
 Bandcamp only exposes download links to the logged-in owner of the collection,
 so this script needs your Bandcamp `identity` cookie:
 
@@ -34,11 +39,11 @@ Options:
   --list     just show the list, don't download
   --dry-run  resolve the download URLs but don't download the files
              (with --latest: a quick check that the login works)
-  --url      a different Bandcamp collection URL
+  --url      the Bandcamp collection URL (default: BANDCAMP_COLLECTION_URL in .env)
 
 Sync mode:
   --sync     scan the WHOLE collection and download every show that isn't
-             already in --dest (default: /Volumes/music/FLAC/STS9). Lists what's
+             already in --dest (default: BANDCAMP_SYNC_DEST in .env). Lists what's
              missing and asks before downloading. Combine with --list to only see
              what's missing. Folders named differently (older Bandcamp names,
              other date formats) still count if the date and venue match.
@@ -58,9 +63,9 @@ Login:
   --set-identity  paste a new identity cookie (input hidden, or piped in); it's
                checked with Bandcamp, then saved to identity.txt and .env.
 
-Settings: see the constants below; each can be overridden with an environment
-variable (BANDCAMP_IDENTITY, BANDCAMP_COLLECTION_URL, BANDCAMP_SYNC_DEST,
-BANDCAMP_SYNC_BAND, BANDCAMP_TEMP_DIR, BANDCAMP_LOG_DIR).
+Settings come from environment variables or the matching lines in .env
+(BANDCAMP_IDENTITY, BANDCAMP_COLLECTION_URL, BANDCAMP_SYNC_DEST,
+BANDCAMP_SYNC_BAND, BANDCAMP_TEMP_DIR, BANDCAMP_LOG_DIR); see the constants below.
 
 Exit codes: 0 ok, 1 error or some shows failed, 3 not logged in.
 """
@@ -83,13 +88,35 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-# Settings. Each can be overridden by the environment variable in brackets
-# (that's how the Docker container configures them).
-COLLECTION_URL = os.environ.get("BANDCAMP_COLLECTION_URL") or "https://bandcamp.com/squaresandcubes"
+def load_env_file(path):
+    """Read BANDCAMP_* settings from a .env file (KEY=value lines) next to this
+    script, so your own collection, folders and cookie live in that private file
+    instead of in the code. Real environment variables win over the file."""
+    try:
+        with open(path) as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return
+    for line in lines:
+        m = re.match(r"\s*(BANDCAMP_[A-Z_]+)\s*=\s*(.*?)\s*$", line)
+        if m and m.group(1) not in os.environ:
+            value = m.group(2)
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+                value = value[1:-1]
+            if value:
+                os.environ[m.group(1)] = value
+
+
+load_env_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+
+# Settings. Each comes from the environment variable named here, or from the same
+# line in .env next to this script (see .env.example).
+# Your collection, e.g. https://bandcamp.com/your-username [BANDCAMP_COLLECTION_URL]
+COLLECTION_URL = os.environ.get("BANDCAMP_COLLECTION_URL") or ""
 # Login cookie: BANDCAMP_IDENTITY, else the contents of identity.txt next to this script.
 DEFAULT_IDENTITY = ""
 IDENTITY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "identity.txt")
-SYNC_DEST = os.environ.get("BANDCAMP_SYNC_DEST") or "/Volumes/music/FLAC/STS9"  # default --dest for --sync
+SYNC_DEST = os.environ.get("BANDCAMP_SYNC_DEST") or ""  # default --dest for --sync / --fix-names
 SYNC_BAND = os.environ.get("BANDCAMP_SYNC_BAND") or "STS9"                      # default --band for --sync
 # Where zips are downloaded and unpacked temporarily [BANDCAMP_TEMP_DIR]
 TEMP_ROOT = os.environ.get("BANDCAMP_TEMP_DIR") or os.path.expanduser("~/Downloads")
@@ -608,13 +635,15 @@ def set_identity(collection_url):
 
 def main():
     ap = argparse.ArgumentParser(description="Pick and download recent shows from a Bandcamp collection.")
-    ap.add_argument("--url", default=COLLECTION_URL)
+    ap.add_argument("--url", default=COLLECTION_URL,
+                    help="your Bandcamp collection, e.g. https://bandcamp.com/your-username "
+                         "(default: BANDCAMP_COLLECTION_URL in .env)")
     ap.add_argument("--count", type=int, default=10, help="how many recent shows to list")
     ap.add_argument("--latest", action="store_true", help="download the newest show without asking")
     ap.add_argument("--format", default="flac")
     ap.add_argument("--dest", "--out",
-                    help="folder to put the extracted show folders in "
-                         f"(default: current folder, or {SYNC_DEST} with --sync)")
+                    help="folder to put the extracted show folders in (default: current "
+                         "folder; with --sync / --fix-names, BANDCAMP_SYNC_DEST in .env)")
     ap.add_argument("--list", action="store_true", help="only list shows, don't download")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--sync", action="store_true",
@@ -633,6 +662,12 @@ def main():
                     help="paste a new Bandcamp identity cookie: checks it works, then saves it "
                          "to identity.txt and .env next to this script")
     args = ap.parse_args()
+    if not args.url:
+        sys.exit("Which Bandcamp collection? Set BANDCAMP_COLLECTION_URL in .env "
+                 "(see .env.example), or pass --url https://bandcamp.com/your-username")
+    if (args.sync or args.fix_names) and not (args.dest or SYNC_DEST):
+        sys.exit("Which music folder? Pass --dest /path/to/music, "
+                 "or set BANDCAMP_SYNC_DEST in .env (see .env.example).")
     args.dest = os.path.abspath(os.path.expanduser(
         args.dest or (SYNC_DEST if (args.sync or args.fix_names) else ".")))
 

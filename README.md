@@ -22,6 +22,7 @@ Quick start without Docker:
 ```bash
 git clone https://github.com/SquaresAndCubes/bandcamp-download-2.0.git
 cd bandcamp-download-2.0
+cp .env.example .env                              # then set BANDCAMP_COLLECTION_URL in it
 python3 bandcamp_download.py --set-identity      # log in once (see below)
 python3 bandcamp_download.py --dest ~/Music/STS9  # pick shows to download
 ```
@@ -39,16 +40,27 @@ sync without Docker? A cron job does the same:
 | File | What it is | Needed for |
 |---|---|---|
 | `bandcamp_download.py` | The downloader. | Both |
-| `identity.txt` | **Private.** Your Bandcamp login cookie, for running the script directly. Created by `--set-identity`. | Script |
+| `.env` | **Private.** Your settings: collection URL, music folder, login cookie, Docker options. Never commit or share it. | Both |
+| `.env.example` | Template for `.env`. | Both |
+| `identity.txt` | **Private, optional.** The login cookie on its own; used if `.env` has none. Created by `--set-identity`. | Script |
 | `scheduler.py` | Runs the sync daily at `SYNC_TIME` and sends notifications. | Docker |
 | `Dockerfile`, `docker-compose.yml` | The container. | Docker |
-| `.env` | **Private.** Login cookie and settings for the container. Never commit or share it. | Docker |
-| `.env.example` | Template for `.env`. | Docker |
 
 ## Using the script on its own
 
 `bandcamp_download.py` runs with Python 3.8+ and needs nothing installed (standard library
 only). Run `python3 bandcamp_download.py --help` for a short summary.
+
+### Setup
+
+Copy `.env.example` to `.env` (in the same folder as the script) and set:
+
+- `BANDCAMP_COLLECTION_URL`: your collection page, `https://bandcamp.com/<your Bandcamp username>`.
+- `BANDCAMP_SYNC_DEST`: your music folder, used by `--sync` and `--fix-names` when you don't
+  pass `--dest`.
+
+Your settings stay in `.env`, which is git-ignored, so they never end up on GitHub. You can
+also skip `.env` and pass `--url` and `--dest` every time.
 
 ### Logging in
 
@@ -89,10 +101,10 @@ is quicker on network shares.
 | `--count N` | How many recent shows to list (default 10). |
 | `--latest` | Skip the prompt and download only the newest show. |
 | `--format F` | `flac` (default), `mp3-320`, `mp3-v0`, `aac-hi`, `vorbis`, `alac`, `wav` or `aiff-lossless`. |
-| `--dest DIR` | Folder the show folders go in (default: current folder; with `--sync` or `--fix-names`, `/Volumes/music/FLAC/STS9`). `--out` is another name for it. |
+| `--dest DIR` | Folder the show folders go in (default: current folder; with `--sync` or `--fix-names`, `BANDCAMP_SYNC_DEST` from `.env`). `--out` is another name for it. |
 | `--list` | Only show the list; don't download. |
 | `--dry-run` | Get the download links but don't download. With `--latest`, a quick way to check the login works. |
-| `--url URL` | A different Bandcamp collection (default `https://bandcamp.com/squaresandcubes`). |
+| `--url URL` | The Bandcamp collection, e.g. `https://bandcamp.com/your-username` (default: `BANDCAMP_COLLECTION_URL` from `.env`). |
 
 ### Syncing the whole collection
 
@@ -141,14 +153,14 @@ Nothing is saved if the check fails.
 
 ### Settings
 
-Defaults are at the top of the script; each can also be set with an environment variable
-(this is how the Docker container configures them):
+Each setting can go in `.env` next to the script or be set as an environment variable
+(environment variables win; this is also how the Docker container configures them):
 
 | Variable | Default | What it is |
 |---|---|---|
 | `BANDCAMP_IDENTITY` | contents of `identity.txt` | Login cookie. |
-| `BANDCAMP_COLLECTION_URL` | `https://bandcamp.com/squaresandcubes` | Collection to download from. |
-| `BANDCAMP_SYNC_DEST` | `/Volumes/music/FLAC/STS9` | Default `--dest` for `--sync` / `--fix-names`. |
+| `BANDCAMP_COLLECTION_URL` | none (required, or pass `--url`) | Your collection, `https://bandcamp.com/<username>`. |
+| `BANDCAMP_SYNC_DEST` | none (required for `--sync` / `--fix-names`, or pass `--dest`) | Your music folder. |
 | `BANDCAMP_SYNC_BAND` | `STS9` | Default `--band`. |
 | `BANDCAMP_TEMP_DIR` | `~/Downloads` | Where zips are downloaded and unpacked temporarily. |
 | `BANDCAMP_LOG_DIR` | the script's folder | Where `--fix-names` writes undo scripts. |
@@ -176,20 +188,21 @@ runs `bandcamp_download.py --sync --yes` once a day and can send you notificatio
    (e.g. an `/etc/fstab` entry for your NAS). Note the path of the STS9 folder,
    for example `/mnt/music/FLAC/STS9`.
 
-3. **Get the code onto the Ubuntu machine**, then copy your private `.env` over from the
-   Mac (it isn't in the repo):
+3. **Get the code onto the Ubuntu machine**, then copy over your private `.env` if you
+   already have one on another computer (it isn't in the repo):
 
    ```bash
    git clone https://github.com/SquaresAndCubes/bandcamp-download-2.0.git ~/bandcamp_download
    ```
 
    ```bash
-   scp ~/Documents/bandcamp_download/.env user@ubuntu-host:~/bandcamp_download/
+   scp /path/to/your/.env user@ubuntu-host:~/bandcamp_download/
    ```
 
    No `.env` yet? Copy `.env.example` to `.env` and fill it in.
 
 4. **Edit `.env`** on the Ubuntu machine:
+   - `BANDCAMP_COLLECTION_URL`: your collection, `https://bandcamp.com/<your username>`.
    - `MUSIC_DIR`: the STS9 folder from step 2.
    - `TEMP_DIR`: where zips are kept while each show downloads (default `./tmp`, inside
      this folder). Point it at a disk with a few GB free. It must exist and be owned by

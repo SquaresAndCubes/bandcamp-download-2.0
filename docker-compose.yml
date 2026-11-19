@@ -14,6 +14,9 @@ services:
       SYNC_TIME: ${SYNC_TIME:-04:00}
       RUN_ON_START: ${RUN_ON_START:-false}
       SYNC_ARGS: ${SYNC_ARGS:-}
+      # Container paths for the mounts below. These override any BANDCAMP_SYNC_DEST /
+      # BANDCAMP_TEMP_DIR in .env, which are for running the script directly.
+      BANDCAMP_SYNC_DEST: /music
       BANDCAMP_TEMP_DIR: /work
     # Write files as your Ubuntu user instead of root (run `id -u` / `id -g` to check).
     user: "${PUID:-1000}:${PGID:-1000}"
