@@ -5,6 +5,9 @@ Bandcamp Download 2.0
 List the most recent shows in a Bandcamp fan collection, pick which ones to
 download, and download them.
 
+Runs on Windows, macOS and Linux with Python 3.8+ (standard library only).
+On Windows, run it with `py` instead of `python3`.
+
 Setup: copy .env.example to .env (next to this script) and set
 BANDCAMP_COLLECTION_URL to your collection, e.g. https://bandcamp.com/your-username,
 and BANDCAMP_SYNC_DEST to your music folder (used by --sync / --fix-names).
@@ -57,8 +60,8 @@ Fixing folder names:
   --fix-names  rename existing show folders in --dest (default: the sync folder)
                whose names don't match the current Bandcamp slug, e.g. because
                Bandcamp renamed the release. Shows every rename and asks first;
-               add --list to only preview. Writes undo_renames_<time>.sh next to
-               this script to reverse it.
+               add --list to only preview. Writes undo_renames_<time>.sh (.cmd on
+               Windows) next to this script to reverse it.
 
 Login:
   --set-identity  paste a new identity cookie (input hidden, or piped in); it's
@@ -103,7 +106,7 @@ def load_env_file(path):
     script, so your own collection, folders and cookie live in that private file
     instead of in the code. Real environment variables win over the file."""
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8-sig") as f:
             lines = f.read().splitlines()
     except OSError:
         return
@@ -137,6 +140,11 @@ NOTIFY_URL = (os.environ.get("NOTIFY_URL") or "").strip()
 NOTIFY_DOWNLOADS = (os.environ.get("NOTIFY_DOWNLOADS") or "true").strip().lower() in ("1", "true", "yes")
 # Summary notification at the end of every --sync, even when nothing was new [NOTIFY_SYNC]
 NOTIFY_SYNC = (os.environ.get("NOTIFY_SYNC") or "true").strip().lower() in ("1", "true", "yes")
+for _stream in (sys.stdout, sys.stderr):
+    try:  # a console that can't show a character (e.g. on Windows) prints ? instead of crashing
+        _stream.reconfigure(errors="replace")
+    except (AttributeError, ValueError):
+        pass
 INTERACTIVE = sys.stdout.isatty()  # in Docker logs, show progress in steps instead of live
 COPY_WORKERS = 4         # files copied to --dest at the same time
 COPY_CHUNK = 4 * 2**20   # 4 MB reads/writes; fine locally, and large chunks help on network shares
@@ -255,7 +263,9 @@ def resolve_download(opener, redownload_page_url, fmt):
 
 
 def safe_name(s):
-    return re.sub(r'[\\/:*?"<>|]+', "_", s).strip()
+    """Make a string safe as a file or folder name on macOS, Linux and Windows."""
+    s = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", s).strip()
+    return s.rstrip(". ") or "_"  # Windows drops trailing dots and spaces
 
 
 class Progress:
@@ -537,22 +547,35 @@ def fix_folder_names(opener, data, args):
             print("Cancelled. Nothing renamed.")
             return
     os.makedirs(LOG_DIR, exist_ok=True)
-    log_path = os.path.join(LOG_DIR, time.strftime("undo_renames_%Y%m%d-%H%M%S.sh"))
+    windows = os.name == "nt"
+    log_path = os.path.join(LOG_DIR, time.strftime("undo_renames_%Y%m%d-%H%M%S")
+                            + (".cmd" if windows else ".sh"))
+
+    def cmd_quote(x):  # Windows names can't contain ", but % would be expanded in a .cmd
+        return '"' + x.replace("%", "%%") + '"'
+
     done = 0
-    with open(log_path, "w") as log:
-        log.write("#!/bin/sh\n# Run this to undo the folder renames made by --fix-names.\n")
-        log.write(f"cd {shlex.quote(args.dest)} || exit 1\n")
+    with open(log_path, "w", encoding="utf-8") as log:
+        if windows:
+            log.write("@echo off\nchcp 65001 >nul\nREM Run this to undo the folder renames made by --fix-names.\n")
+            log.write(f"cd /d {cmd_quote(args.dest)} || exit /b 1\n")
+        else:
+            log.write("#!/bin/sh\n# Run this to undo the folder renames made by --fix-names.\n")
+            log.write(f"cd {shlex.quote(args.dest)} || exit 1\n")
         for old, new, _ in renames:
             try:
                 os.rename(os.path.join(args.dest, old), os.path.join(args.dest, new))
             except OSError as e:
                 print(f"  Failed: {old}: {e}")
                 continue
-            log.write(f"mv -n {shlex.quote(new)} {shlex.quote(old)}\n")
+            if windows:
+                log.write(f"if not exist {cmd_quote(old)} ren {cmd_quote(new)} {cmd_quote(old)}\n")
+            else:
+                log.write(f"mv -n {shlex.quote(new)} {shlex.quote(old)}\n")
             log.flush()
             done += 1
     print(f"\nRenamed {done} of {len(renames)} folders.")
-    print(f"To undo: sh {shlex.quote(log_path)}")
+    print(f"To undo: {cmd_quote(log_path)}" if windows else f"To undo: sh {shlex.quote(log_path)}")
 
 
 def fetch_all_items(opener, data, redownload_urls):
@@ -680,7 +703,7 @@ def set_identity(collection_url):
     def write_private(path, text):
         tmp = path + ".new"
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
         os.replace(tmp, path)
 
@@ -688,7 +711,7 @@ def set_identity(collection_url):
     print(f"Saved to {IDENTITY_FILE}")
     env_path = os.path.join(here, ".env")
     if os.path.exists(env_path):
-        with open(env_path) as f:
+        with open(env_path, encoding="utf-8-sig") as f:
             lines = f.read().splitlines()
         new_line = f"BANDCAMP_IDENTITY='{cookie}'"
         if any(l.startswith("BANDCAMP_IDENTITY=") for l in lines):
@@ -745,7 +768,7 @@ def main():
 
     identity = os.environ.get("BANDCAMP_IDENTITY", "").strip() or DEFAULT_IDENTITY
     if not identity and os.path.exists(IDENTITY_FILE):
-        with open(IDENTITY_FILE) as f:
+        with open(IDENTITY_FILE, encoding="utf-8-sig") as f:
             identity = f.read().strip()
     opener = build_opener(identity)
     try:

@@ -7,17 +7,20 @@ folder, one folder per show, named after the show's Bandcamp URL slug
 ## Two ways to use it
 
 **Docker is optional.** Everything is done by one script, `bandcamp_download.py`, and you
-can run it on its own on any machine with Python 3.8+ (macOS and Ubuntu already have it).
-Nothing to install: it only uses Python's standard library.
+can run it on its own on **Windows, macOS or Linux**, on any machine with Python 3.8+
+(macOS and Ubuntu already have it; on Windows, install it from python.org, see
+[Running on Windows](#running-on-windows)). Nothing else to install: it only uses Python's
+standard library.
 
 | | Just the script | Docker |
 |---|---|---|
-| What you need | Python 3 | Docker |
+| What you need | Python 3 (Windows, macOS or Linux) | Docker (set up here for Ubuntu) |
 | How it runs | When you run it | Automatically, daily or every few hours |
 | Good for | Picking shows by hand, a one-off sync, fixing folder names | A server that keeps the music folder up to date unattended |
 | Instructions | [Using the script on its own](#using-the-script-on-its-own) | [Running it daily with Docker](#running-it-daily-with-docker-optional) |
 
-Quick start without Docker:
+Quick start without Docker (macOS / Linux; for Windows see
+[Running on Windows](#running-on-windows)):
 
 ```bash
 git clone https://github.com/SquaresAndCubes/bandcamp-download-2.0.git
@@ -28,7 +31,8 @@ python3 bandcamp_download.py --dest ~/Music/STS9  # pick shows to download
 ```
 
 The Docker setup just runs `bandcamp_download.py --sync --yes` on a schedule. Want a daily
-sync without Docker? A cron job does the same:
+sync without Docker? A cron job does the same (on Windows, use Task Scheduler, see
+[Running on Windows](#running-on-windows)):
 
 ```bash
 # crontab -e   (every day at 04:00)
@@ -48,8 +52,46 @@ sync without Docker? A cron job does the same:
 
 ## Using the script on its own
 
-`bandcamp_download.py` runs with Python 3.8+ and needs nothing installed (standard library
-only). Run `python3 bandcamp_download.py --help` for a short summary.
+`bandcamp_download.py` runs with Python 3.8+ on Windows, macOS and Linux, and needs
+nothing else installed (standard library only). Run `python3 bandcamp_download.py --help`
+for a short summary. On Windows, type `py` instead of `python3` (see
+[Running on Windows](#running-on-windows)).
+
+### Running on Windows
+
+The script works the same on Windows. The differences:
+
+1. **Install Python 3** from https://www.python.org/downloads/ (tick "Add python.exe to
+   PATH" in the installer). That also installs the `py` launcher, so in the commands in
+   this README, type `py` where it says `python3`.
+2. **Get the code**: `git clone https://github.com/SquaresAndCubes/bandcamp-download-2.0.git`
+   if you have Git, or on GitHub click **Code → Download ZIP** and unzip it.
+3. **Set up and run** in PowerShell or Windows Terminal, in that folder:
+
+   ```powershell
+   copy .env.example .env                         # then edit .env in Notepad
+   py bandcamp_download.py --set-identity         # paste the cookie with Ctrl+V or right-click
+   py bandcamp_download.py --dest "D:\Music\STS9"  # pick shows to download
+   py bandcamp_download.py --sync --dest "D:\Music\STS9"
+   ```
+
+   Put paths with spaces in quotes. In `.env`, Windows paths work as they are, e.g.
+   `BANDCAMP_SYNC_DEST=D:\Music\STS9` or a network share like `\\nas\music\FLAC\STS9`.
+4. **Temp files** go to your `Downloads` folder (`%USERPROFILE%\Downloads`) by default,
+   like on a Mac.
+5. **Undoing `--fix-names`**: on Windows the undo file is `undo_renames_<time>.cmd`;
+   run it by double-clicking it or typing its path.
+6. **Syncing on a schedule** without Docker: use Task Scheduler, e.g. daily at 04:00:
+
+   ```powershell
+   schtasks /create /tn "Bandcamp sync" /sc daily /st 04:00 /tr "py C:\path\to\bandcamp_download.py --sync --yes"
+   ```
+
+   That uses `BANDCAMP_SYNC_DEST` from `.env`. For hourly, use `/sc hourly` instead of
+   `/sc daily /st 04:00`.
+
+The Docker setup in this README is written for Ubuntu and hasn't been tested with
+Docker Desktop on Windows; on Windows, the script with Task Scheduler does the same job.
 
 ### Setup
 
