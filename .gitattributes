@@ -1,0 +1,3 @@
+# Keep Unix line endings in every checkout (including Windows), so .env files
+# copied from .env.example and the scripts inside the Docker image stay LF.
+* text=auto eol=lf

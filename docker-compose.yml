@@ -23,7 +23,7 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - type: bind
-        source: ${MUSIC_DIR:?Set MUSIC_DIR in .env to the STS9 music folder on this machine}
+        source: ${MUSIC_DIR:?Set MUSIC_DIR in .env to the music folder on this machine (or MUSIC_DIR=nas with docker-compose.nas.yml)}
         target: /music
         bind:
           # If the folder is missing (a wrong path, or a share/drive that isn't mounted), fail instead of

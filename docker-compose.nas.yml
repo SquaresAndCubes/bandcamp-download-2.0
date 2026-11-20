@@ -1,0 +1,32 @@
+# Optional: have Docker connect to the music folder on a NAS (SMB/CIFS share) itself,
+# instead of mounting the share on this computer first.
+#
+# Needed on Windows (Docker Desktop can't use mapped drives like Z: or \\nas\share paths),
+# and handy on macOS or Linux if you'd rather not mount the share yourself.
+#
+# To use it:
+#   1. Copy this file to docker-compose.override.yml (Docker Compose loads that file
+#      automatically; it's git-ignored).
+#   2. In .env, set NAS_HOST, NAS_SHARE_PATH, NAS_USER and NAS_PASSWORD (see .env.example),
+#      and set MUSIC_DIR=nas (it's required but not used when this file is in use).
+#   3. docker compose up -d --build
+#
+# The NAS must be reachable from Docker by IP address or a normal DNS name (names ending
+# in .local often don't work inside Docker). If you change these settings later, remove
+# the old connection first: docker compose down && docker volume rm bandcamp-download_music
+
+services:
+  bandcamp-sync:
+    volumes:
+      # Replaces the MUSIC_DIR folder from docker-compose.yml (same /music target).
+      - type: volume
+        source: music
+        target: /music
+
+volumes:
+  music:
+    driver_opts:
+      type: cifs
+      device: "//${NAS_HOST:?Set NAS_HOST in .env}/${NAS_SHARE_PATH:?Set NAS_SHARE_PATH in .env}"
+      # Files are written as PUID/PGID. NAS_PASSWORD can't contain a comma.
+      o: "username=${NAS_USER:?Set NAS_USER in .env},password=${NAS_PASSWORD:?Set NAS_PASSWORD in .env},uid=${PUID:-1000},gid=${PGID:-1000},file_mode=0664,dir_mode=0775,vers=3.0"

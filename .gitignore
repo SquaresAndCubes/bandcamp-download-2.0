@@ -7,6 +7,8 @@
 !README.md
 !Dockerfile
 !docker-compose.yml
+!docker-compose.nas.yml
+!.gitattributes
 !bandcamp_download.py
 !scheduler.py
 # Keep the (empty) tmp/ folder: docker-compose.yml mounts it as the default TEMP_DIR.
