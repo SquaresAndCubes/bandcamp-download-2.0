@@ -51,7 +51,7 @@ Sync mode:
              (default: STS9; use 'all' for everything)
   --yes, -y  don't ask for confirmation (e.g. for a scheduled job)
   --allow-empty  allow syncing into an empty folder (normally refused, since it
-             usually means the network share isn't mounted)
+             usually means the wrong path, or a share or drive that isn't mounted)
 
 Fixing folder names:
   --fix-names  rename existing show folders in --dest (default: the sync folder)
@@ -139,7 +139,7 @@ NOTIFY_DOWNLOADS = (os.environ.get("NOTIFY_DOWNLOADS") or "true").strip().lower(
 NOTIFY_SYNC = (os.environ.get("NOTIFY_SYNC") or "true").strip().lower() in ("1", "true", "yes")
 INTERACTIVE = sys.stdout.isatty()  # in Docker logs, show progress in steps instead of live
 COPY_WORKERS = 4         # files copied to --dest at the same time
-COPY_CHUNK = 4 * 2**20   # 4 MB reads/writes; large chunks suit network shares
+COPY_CHUNK = 4 * 2**20   # 4 MB reads/writes; fine locally, and large chunks help on network shares
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")
 
@@ -331,10 +331,11 @@ def extract(path, dest):
 
 
 def copy_tree_fast(src, dst, workers=COPY_WORKERS):
-    """Copy the extracted show to its destination, built for slow network shares:
+    """Copy the extracted show to its destination (a local folder or a network share;
+    the tricks below matter most on a share):
     - copies file contents only (no timestamps/permissions/xattrs, which cost extra
       round trips per file on SMB/NFS),
-    - copies several files at once so per-file network latency overlaps,
+    - copies several files at once so per-file latency overlaps,
     - prints overall progress and speed."""
     files = []
     for root, _, names in os.walk(src):
@@ -457,8 +458,8 @@ def match_existing(dest_root, items):
          (or is the only unclaimed folder with that date), or
       2. a date within 3 days and at least 3 venue words in common.
     Returns (missing_items, fuzzy_matches) where fuzzy_matches is [(item, folder)]."""
-    # One directory read for everything: on a network share, checking each show
-    # folder separately takes minutes.
+    # One directory read for everything: checking each show folder separately is
+    # fine locally but takes minutes on a network share.
     with os.scandir(dest_root) as entries:
         folders = {e.name for e in entries if not e.name.startswith(".") and e.is_dir()}
     slugs = {show_slug(it) for it in items}
@@ -505,7 +506,8 @@ def fix_folder_names(opener, data, args):
     (e.g. renamed releases, other date formats) to the current slug.
     Previews everything, asks first, and writes an undo script."""
     if not os.path.isdir(args.dest):
-        sys.exit(f"{args.dest} doesn't exist. Is the network share mounted?")
+        sys.exit(f"{args.dest} doesn't exist. Check the path (and, if it's on a "
+                 "network share or external drive, that it's mounted).")
     print("Scanning the whole collection...")
     shows = [it for it in fetch_all_items(opener, data, {})
              if band_matches(it, args.band)]
@@ -718,7 +720,7 @@ def main():
                          f"(default: {SYNC_BAND}; 'all' for everything)")
     ap.add_argument("--allow-empty", action="store_true",
                     help="let --sync download into an empty folder (normally refused, "
-                         "since it usually means the share isn't mounted)")
+                         "since it usually means the wrong path or an unmounted share/drive)")
     ap.add_argument("--fix-names", action="store_true",
                     help="rename existing show folders in --dest to their current Bandcamp slug "
                          "(previews and asks first; writes an undo script)")
@@ -762,13 +764,16 @@ def main():
         return
 
     if args.sync:
-        # Don't create the folder: if a network share isn't mounted, we'd fill the local disk.
+        # Don't create the folder: a typo, or a share or external drive that isn't mounted,
+        # would otherwise mean downloading everything to the wrong place.
         if not os.path.isdir(args.dest):
-            sys.exit(f"{args.dest} doesn't exist. Is the network share mounted?")
-        # An empty folder usually means the share isn't mounted (Docker creates an empty
-        # mount point), and syncing would re-download the whole collection.
+            sys.exit(f"{args.dest} doesn't exist. Check the path (and, if it's on a "
+                     "network share or external drive, that it's mounted).")
+        # An empty folder usually means the wrong path or an unmounted share/drive (Docker
+        # creates an empty mount point), and syncing would re-download the whole collection.
         if not args.allow_empty and not any(not n.startswith(".") for n in os.listdir(args.dest)):
-            sys.exit(f"{args.dest} is empty. Is the network share mounted? "
+            sys.exit(f"{args.dest} is empty. Is that the right folder (and, if it's on a "
+                     "network share or external drive, is it mounted)? "
                      "(Use --allow-empty if you really want to download everything into it.)")
         print("Scanning the whole collection...")
         all_items = fetch_all_items(opener, data, redownload_urls)

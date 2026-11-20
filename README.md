@@ -93,8 +93,8 @@ are skipped.
 
 The `.zip` files are never kept: each one goes in a temp folder (`bandcamp-dl-<random>`,
 in `~/Downloads` by default) that's deleted after the show, even if the download or
-extraction fails. The extracted files are then copied into `--dest`, 4 at a time, which
-is quicker on network shares.
+extraction fails. The extracted files are then copied into `--dest`, 4 at a time. That
+works for any folder, local or on a network share, and is noticeably quicker on a share.
 
 | Option | What it does |
 |---|---|
@@ -126,7 +126,7 @@ check it.
 | `--sync` | Download everything missing from `--dest`. Add `--list` to only see what's missing. |
 | `--band NAMES` | Only sync these artists, comma-separated, e.g. `"STS9,David Phipps"` (default `STS9`; `all` for everything). |
 | `--yes`, `-y` | Don't ask for confirmation (for scheduled runs). |
-| `--allow-empty` | Allow syncing into an empty folder. Normally refused, because an empty folder usually means the network share isn't mounted, and syncing would re-download the whole collection. |
+| `--allow-empty` | Allow syncing into an empty folder. Normally refused, because an empty folder usually means the wrong path, or a network share or external drive that isn't mounted, and syncing would re-download the whole collection. |
 
 ### Fixing folder names
 
@@ -185,9 +185,9 @@ and can send you notifications.
    sudo usermod -aG docker $USER   # then log out and back in
    ```
 
-2. **Mount the music share** on the Ubuntu machine so it's there after a reboot
-   (e.g. an `/etc/fstab` entry for your NAS). Note the path of the STS9 folder,
-   for example `/mnt/music/FLAC/STS9`.
+2. **Find the music folder** on the Ubuntu machine and note the path of the STS9
+   folder, for example `/mnt/music/FLAC/STS9`. It can be a local folder or disk. If it's
+   on a NAS, mount the share so it's there after a reboot (e.g. an `/etc/fstab` entry).
 
 3. **Get the code onto the Ubuntu machine**, then copy over your private `.env` if you
    already have one on another computer (it isn't in the repo):
@@ -281,8 +281,9 @@ if that's too many.
 These apply whether you run the script yourself or with Docker:
 
 - If the music folder doesn't exist, `--sync` stops (it won't create it). If it exists but
-  is **empty** (e.g. the network share isn't mounted and you're looking at the bare mount
-  point), `--sync` refuses to run instead of re-downloading the whole collection.
+  is **empty** (e.g. a wrong path, or a network share or external drive that isn't mounted
+  so you're looking at the bare mount point), `--sync` refuses to run instead of
+  re-downloading the whole collection.
 - `.zip` files are never kept. They're downloaded and unpacked in a temp folder, then
   copied into the music folder and deleted. Each show needs roughly 2× its size free there
   while it's processed. If the temp folder isn't writable, the script stops with a message

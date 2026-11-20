@@ -26,7 +26,7 @@ services:
         source: ${MUSIC_DIR:?Set MUSIC_DIR in .env to the STS9 music folder on this machine}
         target: /music
         bind:
-          # If the folder is missing (e.g. the share isn't mounted), fail instead of
+          # If the folder is missing (a wrong path, or a share/drive that isn't mounted), fail instead of
           # creating an empty folder and downloading the whole collection into it.
           create_host_path: false
       # Temporary space for zips while each show is downloaded and unpacked.
