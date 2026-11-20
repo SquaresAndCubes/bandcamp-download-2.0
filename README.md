@@ -124,7 +124,7 @@ check it.
 | Option | What it does |
 |---|---|
 | `--sync` | Download everything missing from `--dest`. Add `--list` to only see what's missing. |
-| `--band NAME` | Only sync this artist (default `STS9`; `all` for everything). |
+| `--band NAMES` | Only sync these artists, comma-separated, e.g. `"STS9,David Phipps"` (default `STS9`; `all` for everything). |
 | `--yes`, `-y` | Don't ask for confirmation (for scheduled runs). |
 | `--allow-empty` | Allow syncing into an empty folder. Normally refused, because an empty folder usually means the network share isn't mounted, and syncing would re-download the whole collection. |
 
@@ -161,7 +161,7 @@ Each setting can go in `.env` next to the script or be set as an environment var
 | `BANDCAMP_IDENTITY` | contents of `identity.txt` | Login cookie. |
 | `BANDCAMP_COLLECTION_URL` | none (required, or pass `--url`) | Your collection, `https://bandcamp.com/<username>`. |
 | `BANDCAMP_SYNC_DEST` | none (required for `--sync` / `--fix-names`, or pass `--dest`) | Your music folder. |
-| `BANDCAMP_SYNC_BAND` | `STS9` | Default `--band`. |
+| `BANDCAMP_SYNC_BAND` | `STS9` | Default `--band`, e.g. `STS9,David Phipps`. |
 | `BANDCAMP_TEMP_DIR` | `~/Downloads` | Where zips are downloaded and unpacked temporarily. |
 | `BANDCAMP_LOG_DIR` | the script's folder | Where `--fix-names` writes undo scripts. |
 

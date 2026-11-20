@@ -47,7 +47,8 @@ Sync mode:
              missing and asks before downloading. Combine with --list to only see
              what's missing. Folders named differently (older Bandcamp names,
              other date formats) still count if the date and venue match.
-  --band     only sync this artist (default: STS9; use 'all' for everything)
+  --band     only sync these artists, comma-separated, e.g. "STS9,David Phipps"
+             (default: STS9; use 'all' for everything)
   --yes, -y  don't ask for confirmation (e.g. for a scheduled job)
   --allow-empty  allow syncing into an empty folder (normally refused, since it
              usually means the network share isn't mounted)
@@ -302,6 +303,12 @@ def download(opener, url, out_dir, fallback_name):
     return path
 
 
+def band_matches(item, band):
+    """--band filter: 'all', or a comma-separated list of artist names (any case)."""
+    wanted = {b.strip().lower() for b in band.split(",") if b.strip()}
+    return "all" in wanted or item.get("band_name", "").strip().lower() in wanted
+
+
 def show_slug(item):
     """The show's slug from its Bandcamp URL, e.g. .../album/20261114-royal-oak-music-theatre-royal-oak-mi."""
     slug = (item.get("url_hints") or {}).get("slug")
@@ -501,7 +508,7 @@ def fix_folder_names(opener, data, args):
         sys.exit(f"{args.dest} doesn't exist. Is the network share mounted?")
     print("Scanning the whole collection...")
     shows = [it for it in fetch_all_items(opener, data, {})
-             if args.band.lower() == "all" or it.get("band_name", "").lower() == args.band.lower()]
+             if band_matches(it, args.band)]
     _, fuzzy = match_existing(args.dest, shows)
     renames = []
     for it, folder in fuzzy:
@@ -707,7 +714,8 @@ def main():
     ap.add_argument("--sync", action="store_true",
                     help="scan the whole collection and download every show not already in --dest")
     ap.add_argument("--band", default=SYNC_BAND,
-                    help=f"with --sync, only include this artist (default: {SYNC_BAND}; 'all' for everything)")
+                    help=f"with --sync, only include these artists, comma-separated "
+                         f"(default: {SYNC_BAND}; 'all' for everything)")
     ap.add_argument("--allow-empty", action="store_true",
                     help="let --sync download into an empty folder (normally refused, "
                          "since it usually means the share isn't mounted)")
@@ -765,7 +773,7 @@ def main():
         print("Scanning the whole collection...")
         all_items = fetch_all_items(opener, data, redownload_urls)
         shows = [it for it in all_items
-                 if args.band.lower() == "all" or it.get("band_name", "").lower() == args.band.lower()]
+                 if band_matches(it, args.band)]
         no_dl = [it for it in shows if not it.get("download_available")]
         shows = [it for it in shows if it.get("download_available")]
         missing, fuzzy = match_existing(args.dest, shows)
